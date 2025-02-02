@@ -1,0 +1,80 @@
+// explore.proto
+syntax = "proto3";
+
+package explore;
+
+option go_package = "github.com/yourusername/explore/proto";
+
+// Enum to represent a decision type.
+enum DecisionType {
+  DECISION_UNKNOWN = 0;
+  LIKE = 1;
+  PASS = 2;
+}
+
+// Request to submit (or update) a decision.
+message SubmitDecisionRequest {
+  string from_user_id = 1;
+  string to_user_id = 2;
+  DecisionType decision = 3;
+}
+
+// Response for a decision submission.
+message SubmitDecisionResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Request to retrieve a specific decision.
+message GetDecisionRequest {
+  string from_user_id = 1;
+  string to_user_id = 2;
+}
+
+// Response for retrieving a decision.
+message GetDecisionResponse {
+  string from_user_id = 1;
+  string to_user_id = 2;
+  DecisionType decision = 3;
+  int64 timestamp = 4;
+}
+
+// Request to list decisions for a given user.
+message ListDecisionsRequest {
+  string user_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+// A single decision record.
+message Decision {
+  string from_user_id = 1;
+  string to_user_id = 2;
+  DecisionType decision = 3;
+  int64 timestamp = 4;
+}
+
+// Response for listing decisions.
+message ListDecisionsResponse {
+  repeated Decision decisions = 1;
+}
+
+// Request to delete a decision.
+message DeleteDecisionRequest {
+  string from_user_id = 1;
+  string to_user_id = 2;
+}
+
+// Response for deleting a decision.
+message DeleteDecisionResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// The Explore Service definition.
+service ExploreService {
+  rpc SubmitDecision(SubmitDecisionRequest) returns (SubmitDecisionResponse);
+  rpc GetDecision(GetDecisionRequest) returns (GetDecisionResponse);
+  rpc ListDecisions(ListDecisionsRequest) returns (ListDecisionsResponse);
+  rpc DeleteDecision(DeleteDecisionRequest) returns (DeleteDecisionResponse);
+}

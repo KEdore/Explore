@@ -62,6 +62,22 @@ docker run -e DB_USER=myuser \
 docker-compose up --build
 ```
 
+### Restarting the Service
+
+To restart the service using Docker Compose, you can use the following commands:
+
+```bash
+docker-compose down -v
+docker-compose up -d
+```
+
+These commands will:
+- Stop and remove the containers, networks, volumes, and images created by `docker-compose up`.
+- Rebuild and start the containers in detached mode.
+
+This is useful for applying configuration changes or updates to the service without manually stopping and starting each container.
+
+
 This command will:
 - Build the app image using the Dockerfile
 - Start the MySQL container
@@ -115,4 +131,4 @@ make test
 
 6. Pagination Improvements: Consider moving to cursor-based pagination for better performance on very large datasets
 
-7. Integration Tests: Add integration tests to validate the service end-to-end 
+7. Integration Tests: Add more integration tests to validate the service end-to-end

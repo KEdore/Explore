@@ -1,11 +1,9 @@
-// File: internal/service/explore_test.go
 package service_test
 
 import (
 	"context"
 	"regexp"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 
@@ -32,13 +30,12 @@ func TestPutDecision_NoMutual(t *testing.T) {
 
 	// Expect the Exec call for inserting/updating the decision.
 	mock.ExpectExec(regexp.QuoteMeta(`
-		INSERT INTO decisions (actor_user_id, recipient_user_id, liked_recipient, timestamp)
-		VALUES (?, ?, ?, ?)
+		INSERT INTO decisions (actor_user_id, recipient_user_id, liked_recipient)
+		VALUES (?, ?, ?)
 		ON DUPLICATE KEY UPDATE
-			liked_recipient = VALUES(liked_recipient),
-			timestamp = VALUES(timestamp)
+			liked_recipient = VALUES(liked_recipient)
 	`)).
-		WithArgs("actor1", "recipient1", true, sqlmock.AnyArg()).
+		WithArgs("actor1", "recipient1", true).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// Expect the mutual like query returning count = 0.
@@ -80,13 +77,12 @@ func TestPutDecision_Mutual(t *testing.T) {
 	ctx := context.Background()
 
 	mock.ExpectExec(regexp.QuoteMeta(`
-		INSERT INTO decisions (actor_user_id, recipient_user_id, liked_recipient, timestamp)
-		VALUES (?, ?, ?, ?)
+		INSERT INTO decisions (actor_user_id, recipient_user_id, liked_recipient)
+		VALUES (?, ?, ?)
 		ON DUPLICATE KEY UPDATE
-			liked_recipient = VALUES(liked_recipient),
-			timestamp = VALUES(timestamp)
+			liked_recipient = VALUES(liked_recipient)
 	`)).
-		WithArgs("actor1", "recipient1", true, sqlmock.AnyArg()).
+		WithArgs("actor1", "recipient1", true).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// Simulate a mutual like: count > 0.
@@ -129,13 +125,12 @@ func TestPutDecision_NotLiked(t *testing.T) {
 	ctx := context.Background()
 
 	mock.ExpectExec(regexp.QuoteMeta(`
-		INSERT INTO decisions (actor_user_id, recipient_user_id, liked_recipient, timestamp)
-		VALUES (?, ?, ?, ?)
+		INSERT INTO decisions (actor_user_id, recipient_user_id, liked_recipient)
+		VALUES (?, ?, ?)
 		ON DUPLICATE KEY UPDATE
-			liked_recipient = VALUES(liked_recipient),
-			timestamp = VALUES(timestamp)
+			liked_recipient = VALUES(liked_recipient)
 	`)).
-		WithArgs("actor2", "recipient2", false, sqlmock.AnyArg()).
+		WithArgs("actor2", "recipient2", false).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	req := &pb.PutDecisionRequest{
@@ -169,15 +164,14 @@ func TestListLikedYou(t *testing.T) {
 	ctx := context.Background()
 
 	// Create rows to simulate two likers.
-	now := time.Now().Unix()
-	rows := sqlmock.NewRows([]string{"actor_user_id", "timestamp"}).
-		AddRow("actor1", now).
-		AddRow("actor2", now)
+	rows := sqlmock.NewRows([]string{"actor_user_id"}).
+		AddRow("actor1").
+		AddRow("actor2")
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT actor_user_id, timestamp
+		SELECT actor_user_id
 		FROM decisions
 		WHERE recipient_user_id = ? AND liked_recipient = TRUE
-		ORDER BY timestamp DESC
+		ORDER BY id DESC
 		LIMIT ? OFFSET ?
 	`)).
 		WithArgs("recipient1", service.DefaultLimit, 0).
@@ -185,7 +179,6 @@ func TestListLikedYou(t *testing.T) {
 
 	req := &pb.ListLikedYouRequest{
 		RecipientUserId: "recipient1",
-		// Use helper to set an empty pagination token.
 		PaginationToken: strPtr(""),
 	}
 	res, err := srv.ListLikedYou(ctx, req)
@@ -217,18 +210,17 @@ func TestListNewLikedYou(t *testing.T) {
 	ctx := context.Background()
 
 	// Create rows to simulate one liker who hasn't been liked back.
-	now := time.Now().Unix()
-	rows := sqlmock.NewRows([]string{"actor_user_id", "timestamp"}).
-		AddRow("actor3", now)
+	rows := sqlmock.NewRows([]string{"actor_user_id"}).
+		AddRow("actor3")
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT d.actor_user_id, d.timestamp
+		SELECT d.actor_user_id
 		FROM decisions d
 		WHERE d.recipient_user_id = ? AND d.liked_recipient = TRUE
 		  AND NOT EXISTS (
 			  SELECT 1 FROM decisions d2
 			  WHERE d2.actor_user_id = ? AND d2.recipient_user_id = d.actor_user_id AND d2.liked_recipient = TRUE
 		  )
-		ORDER BY d.timestamp DESC
+		ORDER BY d.id DESC
 		LIMIT ? OFFSET ?
 	`)).
 		WithArgs("recipient2", "recipient2", service.DefaultLimit, 0).

@@ -5,58 +5,43 @@ import (
 	"database/sql"
 	"fmt"
 	"strconv"
-	"time"
 
 	pb "github.com/KEdore/explore/proto"
 )
 
-// Exported constant for pagination limit.
 const DefaultLimit = 20
 
-// ExploreServer implements the ExploreService as defined in the proto file.
-// It holds a pointer to an SQL database and provides methods to record and query decisions.
 type ExploreServer struct {
 	pb.UnimplementedExploreServiceServer
-
 	db *sql.DB
 }
 
-// NewExploreServer returns a new ExploreServer instance with the provided database connection.
 func NewExploreServer(db *sql.DB) *ExploreServer {
 	return &ExploreServer{db: db}
 }
 
-// PutDecision records or updates a decision from one user (actor) to another (recipient).
-// If the actor liked the recipient, it also checks whether the recipient has liked the actor in return,
-// which would indicate a mutual like.
+// PutDecision inserts (or updates) a decision without any timestamp logic.
 func (s *ExploreServer) PutDecision(ctx context.Context, req *pb.PutDecisionRequest) (*pb.PutDecisionResponse, error) {
-	// SQL query to insert or update a decision based on a unique key (actor_user_id, recipient_user_id).
 	query := `
-		INSERT INTO decisions (actor_user_id, recipient_user_id, liked_recipient, timestamp)
-		VALUES (?, ?, ?, ?)
+		INSERT INTO decisions (actor_user_id, recipient_user_id, liked_recipient)
+		VALUES (?, ?, ?)
 		ON DUPLICATE KEY UPDATE
-			liked_recipient = VALUES(liked_recipient),
-			timestamp = VALUES(timestamp)
+			liked_recipient = VALUES(liked_recipient)
 	`
-	// Use the current Unix timestamp (in seconds).
-	timestamp := time.Now().Unix()
 
-	// Execute the insert/update query.
 	_, err := s.db.ExecContext(
 		ctx,
 		query,
 		req.GetActorUserId(),
 		req.GetRecipientUserId(),
 		req.GetLikedRecipient(),
-		timestamp,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to put decision: %w", err)
 	}
 
-	// Determine if a mutual like exists.
+	// Check for mutual like.
 	mutual := false
-	// Only check for mutual like if the actor has liked the recipient.
 	if req.GetLikedRecipient() {
 		mutualQuery := `
 			SELECT COUNT(*) FROM decisions
@@ -77,12 +62,10 @@ func (s *ExploreServer) PutDecision(ctx context.Context, req *pb.PutDecisionRequ
 	}, nil
 }
 
-// ListLikedYou returns a list of users who have liked the specified recipient.
-// An optional pagination token (a string pointer) is used for pagination.
+// ListLikedYou returns a list of users who liked the recipient.
 func (s *ExploreServer) ListLikedYou(ctx context.Context, req *pb.ListLikedYouRequest) (*pb.ListLikedYouResponse, error) {
-	// Determine the numeric offset from the pagination token.
 	offset := 0
-	if token := req.GetPaginationToken();  token != "" {
+	if token := req.GetPaginationToken(); token != "" {
 		var err error
 		offset, err = strconv.Atoi(token)
 		if err != nil {
@@ -91,13 +74,12 @@ func (s *ExploreServer) ListLikedYou(ctx context.Context, req *pb.ListLikedYouRe
 	}
 
 	query := `
-		SELECT actor_user_id, timestamp
+		SELECT actor_user_id
 		FROM decisions
 		WHERE recipient_user_id = ? AND liked_recipient = TRUE
-		ORDER BY timestamp DESC
+		ORDER BY id DESC
 		LIMIT ? OFFSET ?
 	`
-	// Execute the query to retrieve likers.
 	rows, err := s.db.QueryContext(ctx, query, req.GetRecipientUserId(), DefaultLimit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query liked decisions: %w", err)
@@ -108,11 +90,11 @@ func (s *ExploreServer) ListLikedYou(ctx context.Context, req *pb.ListLikedYouRe
 	count := 0
 	for rows.Next() {
 		var actorID string
-		var ts int64
-		if err := rows.Scan(&actorID, &ts); err != nil {
+		// Since there is no timestamp column, we set ts to 0.
+		ts := int64(0)
+		if err := rows.Scan(&actorID); err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
-		// Convert the timestamp to uint64 as defined in the proto.
 		likers = append(likers, &pb.ListLikedYouResponse_Liker{
 			ActorId:       actorID,
 			UnixTimestamp: uint64(ts),
@@ -123,7 +105,6 @@ func (s *ExploreServer) ListLikedYou(ctx context.Context, req *pb.ListLikedYouRe
 		return nil, fmt.Errorf("rows iteration error: %w", err)
 	}
 
-	// Prepare the next pagination token if the page is full.
 	nextToken := ""
 	if count == DefaultLimit {
 		nextToken = strconv.Itoa(offset + DefaultLimit)
@@ -135,10 +116,8 @@ func (s *ExploreServer) ListLikedYou(ctx context.Context, req *pb.ListLikedYouRe
 	}, nil
 }
 
-// ListNewLikedYou returns a list of users who have liked the recipient,
-// excluding those users who the recipient has already liked in return.
+// ListNewLikedYou returns users who liked the recipient excluding those who have already liked back.
 func (s *ExploreServer) ListNewLikedYou(ctx context.Context, req *pb.ListLikedYouRequest) (*pb.ListLikedYouResponse, error) {
-	// Determine the numeric offset from the pagination token.
 	offset := 0
 	if token := req.GetPaginationToken(); token != "" {
 		var err error
@@ -148,16 +127,15 @@ func (s *ExploreServer) ListNewLikedYou(ctx context.Context, req *pb.ListLikedYo
 		}
 	}
 
-	// Query that selects likers who have not been liked back by the recipient.
 	query := `
-		SELECT d.actor_user_id, d.timestamp
+		SELECT d.actor_user_id
 		FROM decisions d
 		WHERE d.recipient_user_id = ? AND d.liked_recipient = TRUE
 		  AND NOT EXISTS (
 			  SELECT 1 FROM decisions d2
 			  WHERE d2.actor_user_id = ? AND d2.recipient_user_id = d.actor_user_id AND d2.liked_recipient = TRUE
 		  )
-		ORDER BY d.timestamp DESC
+		ORDER BY d.id DESC
 		LIMIT ? OFFSET ?
 	`
 	rows, err := s.db.QueryContext(ctx, query, req.GetRecipientUserId(), req.GetRecipientUserId(), DefaultLimit, offset)
@@ -170,8 +148,8 @@ func (s *ExploreServer) ListNewLikedYou(ctx context.Context, req *pb.ListLikedYo
 	count := 0
 	for rows.Next() {
 		var actorID string
-		var ts int64
-		if err := rows.Scan(&actorID, &ts); err != nil {
+		ts := int64(0)
+		if err := rows.Scan(&actorID); err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
 		likers = append(likers, &pb.ListLikedYouResponse_Liker{
@@ -184,7 +162,6 @@ func (s *ExploreServer) ListNewLikedYou(ctx context.Context, req *pb.ListLikedYo
 		return nil, fmt.Errorf("rows iteration error: %w", err)
 	}
 
-	// Prepare the next pagination token if the page is full.
 	nextToken := ""
 	if count == DefaultLimit {
 		nextToken = strconv.Itoa(offset + DefaultLimit)
@@ -196,7 +173,7 @@ func (s *ExploreServer) ListNewLikedYou(ctx context.Context, req *pb.ListLikedYo
 	}, nil
 }
 
-// CountLikedYou returns the total count of users who have liked the recipient.
+// CountLikedYou returns the count of users who liked the recipient.
 func (s *ExploreServer) CountLikedYou(ctx context.Context, req *pb.CountLikedYouRequest) (*pb.CountLikedYouResponse, error) {
 	query := `
 		SELECT COUNT(*)

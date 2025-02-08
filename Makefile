@@ -22,5 +22,18 @@ proto:
 
 .PHONY: test
 test:
-    @go test ./...
-    @echo "Go tests complete!"
+	@go test ./...
+	@echo "Go tests complete!"
+
+# Integration tests target
+# This target runs the integration tests with the 'integration' build tag.
+# Integration tests typically depend on external services (such as your Docker Compose environment).
+# Make sure those services are up and running (for example, via docker-compose up -d) before executing the integration tests.
+.PHONY: integration
+
+integration: 
+	@docker-compose down -v
+	@docker-compose up -d
+	@go test -v -tags=integration ./integration
+	@echo "Integration tests complete!"
+	

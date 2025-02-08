@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    ports:
+      - "9090:50051"  # Maps host port 9090 to container port 50051 (gRPC server)
+    environment:
+      - DB_USER=myuser
+      - DB_PASS=mypass
+      - DB_NAME=mydb
+      - DB_HOST=mysql        # Use the MySQL service by name on the Docker network
+      - SERVER_ADDRESS=:50051
+    depends_on:
+      - mysql
+    # Use a shell command to wait until MySQL is ready
+    command: sh -c "until nc -z mysql 3306; do echo 'Waiting for MySQL...'; sleep 2; done; ./explore"
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: mydb
+      MYSQL_USER: myuser
+      MYSQL_PASSWORD: mypass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  mysql-data:

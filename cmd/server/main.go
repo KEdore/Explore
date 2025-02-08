@@ -1,32 +1,39 @@
 package main
 
 import (
-	"flag"
+	"context"
 	"log"
-	"net"
+	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/KEdore/Explore/server"
-	pb "github.com/KEdore/Explore/proto"
-	"google.golang.org/grpc"
+	"github.com/KEdore/explore/internal/config"
+	"github.com/KEdore/explore/internal/server"
 )
 
 func main() {
-	// Allow port override
-	port := flag.String("port", "8080", "The server port")
-	flag.Parse()
-
-	lis, err := net.Listen("tcp", ":"+*port)
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to listen on port %s: %v", *port, err)
+		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	grpcServer := grpc.NewServer()
-	store := server.NewInMemoryStore()
-	exploreService := server.NewExploreServiceServer(store)
-	pb.RegisterExploreServiceServer(grpcServer, exploreService)
+	// Create a context that cancels on interrupt signals.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+		<-c
+		cancel()
+	}()
 
-	log.Printf("Server listening on port %s...", *port)
-	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
+	stop, err := server.RunServer(ctx, cfg)
+	if err != nil {
+		log.Fatalf("Failed to start server: %v", err)
 	}
+
+	// Block until context is done.
+	<-ctx.Done()
+	stop()
+	log.Println("Server stopped gracefully.")
 }

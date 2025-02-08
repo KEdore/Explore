@@ -1,15 +1,31 @@
-# Build stage
-FROM golang:1.20-alpine AS builder
+# ===== Build Stage =====
+FROM golang:1.22-alpine AS builder
+
 WORKDIR /app
+
+# Install required system packages (git is needed for module fetching)
+RUN apk add --no-cache git
+
+# Copy go.mod and go.sum to leverage Docker caching for dependency downloads
 COPY go.mod go.sum ./
 RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o explore-service ./cmd/server
 
-# Run stage
+# Copy the full source code
+COPY . .
+
+# Build the application from the correct main package directory
+RUN go build -o explore ./cmd/server
+
+# ===== Final Stage =====
 FROM alpine:latest
-RUN apk --no-cache add ca-certificates
-WORKDIR /root/
-COPY --from=builder /app/explore-service .
-EXPOSE 8080
-CMD ["./explore-service", "-port", "8080"]
+
+WORKDIR /app
+
+# Copy the built binary from the builder stage
+COPY --from=builder /app/explore .
+
+# Expose the gRPC port (default is 50051)
+EXPOSE 50051
+
+# Run the service
+CMD ["./explore"]

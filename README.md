@@ -114,3 +114,5 @@ make test
 5. Enhanced Observability: Integrate logging, tracing, and metrics (e.g., via Prometheus) to monitor performance and issues
 
 6. Pagination Improvements: Consider moving to cursor-based pagination for better performance on very large datasets
+
+7. Integration Tests: Add integration tests to validate the service end-to-end 

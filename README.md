@@ -41,6 +41,7 @@ CREATE TABLE decisions (
 There are two primary ways to run the service: using plain Docker commands or with Docker Compose.
 
 1. Build and run using Docker:
+
 ```bash
 docker build -t explore .
 docker run -e DB_USER=myuser \
@@ -50,46 +51,45 @@ docker run -e DB_USER=myuser \
            -e SERVER_ADDRESS=":50051" \
            -p 50051:50051 \
            explore
-
 ```
 
 - Note: The service listens on port 50051 by default. Adjust the -p flag as needed.
 - If no DB_HOST is specified, the application defaults to localhost:3306.
 
-
 2. Build and run using Docker compose:
+
 ```bash
 docker-compose up --build
 ```
 
 This command will:
-
-Build the app image using the Dockerfile.
-Start the MySQL container.
-Start the Explore Service container, which connects to MySQL using the hostname mysql on the Docker network.
+- Build the app image using the Dockerfile
+- Start the MySQL container
+- Start the Explore Service container, which connects to MySQL using the hostname mysql on the Docker network
 
 Accessing the Service:
-
-The gRPC service is exposed on container port 50051 and mapped to host port 9090.
-You can interact with the service via localhost:9090.
-
+- The gRPC service is exposed on container port 50051 and mapped to host port 9090
+- You can interact with the service via localhost:9090
 
 ### Required Environment Variables
+
 - DB_USER: MySQL username
 - DB_PASS: MySQL password
 - DB_NAME: MySQL database name
 - DB_HOST: MySQL host (defaults to localhost:3306 if not set; in Docker Compose, this is set to mysql)
 - SERVER_ADDRESS: The address the gRPC server listens on (defaults to :50051)
 
-
 ## Testing
 
 Run the tests using:
+
 ```bash
 go test -v ./...
 ```
 
-or ```bash
+or
+
+```bash
 make test
 ```
 
@@ -103,20 +103,14 @@ make test
 
 ## Future Improvements
 
-Caching Layer:
-Add a caching layer (e.g., Redis) for frequently accessed data.
+1. Caching Layer: Add a caching layer (e.g., Redis) for frequently accessed data
 
-Rate Limiting:
-Implement rate limiting to prevent abuse.
+2. Rate Limiting: Implement rate limiting to prevent abuse
 
-Batch Processing:
-For very high volumes, add batch processing mechanisms to update or query decisions.
+3. Batch Processing: For very high volumes, add batch processing mechanisms to update or query decisions
 
-Input Validation Middleware:
-Add middleware to validate incoming requests more robustly.
+4. Input Validation Middleware: Add middleware to validate incoming requests more robustly
 
-Enhanced Observability:
-Integrate logging, tracing, and metrics (e.g., via Prometheus) to monitor performance and issues.
+5. Enhanced Observability: Integrate logging, tracing, and metrics (e.g., via Prometheus) to monitor performance and issues
 
-Pagination Improvements:
-Consider moving to cursor-based pagination for better performance on very large datasets
+6. Pagination Improvements: Consider moving to cursor-based pagination for better performance on very large datasets
